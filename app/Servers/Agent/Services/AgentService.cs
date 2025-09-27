@@ -1,6 +1,7 @@
 using MySql.Data.MySqlClient;
 using Dapper;
 using app.Common;
+using app.Common.Logging;
 
 namespace app.Servers.Agent.Services;
 
@@ -30,7 +31,14 @@ public class AgentService
     // </summary>
     public (bool success, string gameUrl, string errorMsg) PlayerLogin(LoginRequest loginRequest)
     {
-        Console.WriteLine($"[AgentService] Player login request: {System.Text.Json.JsonSerializer.Serialize(loginRequest)}");
+        LogService.Agent.LogInfo("Player login request received", new { 
+            AgentId = loginRequest.agentId, 
+            PlayerName = loginRequest.name,
+            GameId = loginRequest.gameId,
+            Currency = loginRequest.currency,
+            Lang = loginRequest.lang
+        });
+        
         loginRequest.name = loginRequest.agentId.ToString() + '_' + loginRequest.name.Trim();
 
         // 1. 更新玩家信息，不存在則創建
@@ -41,7 +49,7 @@ public class AgentService
         }
 
         // 2. 產生遊戲連結
-        string gameUrl = $"https://game.example.com/play?user={loginRequest.name}&lang={loginRequest.lang}&currency={loginRequest.currency}&gameId={loginRequest.gameId}&token=exampletoken";
+        string gameUrl = $"https://game.example.com/play?user={loginRequest.name}&lang={loginRequest.lang}&currency={loginRequest.currency}&gameId={loginRequest.gameId}&token=exampletoken&BackUrl={Uri.EscapeDataString(loginRequest.backUrl)}";
 
         return (true, gameUrl, string.Empty);
     }

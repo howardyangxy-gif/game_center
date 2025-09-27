@@ -7,5 +7,5 @@ public class LoginRequest : AgentRequestBase
     public string currency { get; set; } = string.Empty;
     public int gameId { get; set; } = 0;
     public string lang { get; set; } = "en";
-    public string backURL { get; set; } = string.Empty;
+    public string backUrl { get; set; } = string.Empty;
 }
