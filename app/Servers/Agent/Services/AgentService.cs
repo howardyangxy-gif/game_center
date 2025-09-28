@@ -1,5 +1,4 @@
-using MySql.Data.MySqlClient;
-using Dapper;
+using System.Text.Json;
 using app.Common;
 using app.Common.Logging;
 
@@ -41,21 +40,28 @@ public class AgentService
         
         loginRequest.name = loginRequest.agentId.ToString() + '_' + loginRequest.name.Trim();
 
-        // 1. 更新玩家信息，不存在則創建
+        // todo:檢查幣種是否與代理幣種一致(下一階段再補)
+
+        // 更新玩家信息，不存在則創建
         var (result, err) = UpdateAccount(loginRequest.agentId, loginRequest.name);
         if (result != 0)
         {
             return (false, string.Empty, $"更新或創建玩家失敗: {err}");
         }
 
-        // 2. 產生遊戲連結
-        string gameUrl = $"https://game.example.com/play?user={loginRequest.name}&lang={loginRequest.lang}&currency={loginRequest.currency}&gameId={loginRequest.gameId}&token=exampletoken&BackUrl={Uri.EscapeDataString(loginRequest.backUrl)}";
+        var token = Token.createToken(JsonSerializer.Serialize(new {
+            agentId = loginRequest.agentId,
+            playerName = loginRequest.name,
+        }));
+
+        // 遊戲連結
+        string gameUrl = $"https://game.example.com/play?user={loginRequest.name}&lang={loginRequest.lang}&currency={loginRequest.currency}&gameId={loginRequest.gameId}&token={token}&BackUrl={Uri.EscapeDataString(loginRequest.backUrl)}";
 
         return (true, gameUrl, string.Empty);
     }
     public (bool success, decimal balance, string errorMsg) PlayerDeposit(TransferRequest transferRequest)
     {
-        Console.WriteLine($"[AgentService] Player deposit request: {System.Text.Json.JsonSerializer.Serialize(transferRequest)}");
+        Console.WriteLine($"[AgentService] Player deposit request: {JsonSerializer.Serialize(transferRequest)}");
         // 檢查錢包type, 單一錢包則略過
         if (transferRequest.walletType == WalletType.Single)
         {
@@ -107,7 +113,7 @@ public class AgentService
 
     public (bool success, decimal balance, string errorMsg) PlayerWithdrawal(TransferRequest transferRequest)
     {
-        Console.WriteLine($"[AgentService] Player withdrawal request: {System.Text.Json.JsonSerializer.Serialize(transferRequest)}");
+        Console.WriteLine($"[AgentService] Player withdrawal request: {JsonSerializer.Serialize(transferRequest)}");
         // 檢查錢包type, 單一錢包則略過
         if (transferRequest.walletType == WalletType.Single)
         {
@@ -152,7 +158,7 @@ public class AgentService
 
     public (bool success, decimal balance, string errorMsg) GetPlayerBalance(BalanceRequest balanceRequest)
     {
-        Console.WriteLine($"[AgentService] Get player balance request: {System.Text.Json.JsonSerializer.Serialize(balanceRequest)}");
+        Console.WriteLine($"[AgentService] Get player balance request: {JsonSerializer.Serialize(balanceRequest)}");
         // 檢查錢包type, 單一錢包則略過
         if (balanceRequest.walletType == WalletType.Single)
         {
@@ -173,7 +179,7 @@ public class AgentService
     {
         try
         {
-            // 1. 更新玩家最後登入時間, 失敗則創建
+            // 更新玩家最後登入時間, 不存在則創建
             var (Result, Err) = _agentDao.UpdateAccount(agentId, playerName);
             if (Result == -1)
             {
@@ -181,7 +187,7 @@ public class AgentService
             }
             else if (Result == 0)
             {
-                // 2. 創建新玩家
+                // 創建新玩家
                 _agentDao.CreatePlayer(agentId, playerName);
                 Console.WriteLine($"[AgentService] Created new player: {playerName} for agent {agentId}");
             }

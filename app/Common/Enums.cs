@@ -103,6 +103,28 @@ namespace app.Common
         SystemError = 5,                // 系統錯誤
         ConfigurationError = 6,         // 配置錯誤
 
+        // 認證與授權錯誤 (100-199)
+        AuthenticationFailed = 100,     // 認證失敗
+        InvalidToken = 101,             // 無效的令牌
+        TokenExpired = 102,             // 令牌過期
+        AccessDenied = 103,             // 存取被拒絕
+        InvalidSignature = 104,         // 簽名驗證失敗
+        InvalidNonce = 105,             // Nonce 驗證失敗
+        IpNotAllowed = 106,             // IP 不在白名單
+
+        // 代理商相關錯誤 (200-299)
+        AgentNotFound = 200,            // 代理商不存在
+        AgentStatusInvalid = 201,       // 代理商狀態無效
+        AgentBalanceInsufficient = 202, // 代理商餘額不足
+        AgentWalletLocked = 203,        // 代理商錢包被鎖定
+
+        // 玩家相關錯誤 (300-399)
+        PlayerNotFound = 300,           // 玩家不存在
+        PlayerNameInvalid = 301,        // 玩家名稱無效
+        PlayerAlreadyExists = 302,      // 玩家已存在
+        PlayerBalanceInsufficient = 303, // 玩家餘額不足
+        PlayerWalletLocked = 304,       // 玩家錢包被鎖定
+
         // 系統層級技術錯誤 (9000-9999)
         StoredProcedureNoResult = 9001, // SP 執行成功但無返回結果
         DatabaseConnectionError = 9002, // 資料庫連線錯誤
