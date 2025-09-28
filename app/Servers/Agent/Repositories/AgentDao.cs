@@ -1,9 +1,9 @@
 using Dapper;
 using app.Infrastructure;
+using Microsoft.OpenApi.Models;
 
 public class AgentDao
 {
-
     public class AgentInfoDto
     {
         public int Id { get; set; }
@@ -12,6 +12,13 @@ public class AgentDao
         public int WalletType { get; set; }
         public int Status { get; set; }
         public string? whiteIp { get; set; } // 新增 whiteIp 屬性
+    }
+
+    public class WalletOperationResult
+    {
+        public int ErrCode { get; set; }
+        public decimal Money { get; set; }
+        public long WalletSeq { get; set; }
     }
 
     public AgentInfoDto? GetAgentInfo(int agentId)
@@ -28,23 +35,47 @@ public class AgentDao
     }
 
     /// <summary>
-    /// 更新代理商錢包餘額（未來將呼叫 SP updateAgentWallet）
+    /// 更新代理商錢包餘額（呼叫 SP updateAgentWallet）
     /// </summary>
     /// <param name="agentId">代理商 ID</param>
     /// <param name="money">帳變金額</param>
     /// <param name="action">帳變操作</param>
     /// <param name="type">帳變類型</param>
     /// <param name="currency">幣別</param>
-    /// <param name="orderNo">訂單號</param>
-    /// <param name="roundNo">局號（非必填）</param>
+    /// <param name="orderId">訂單號</param>
+    /// <param name="memo">備註（非必填）</param>
     /// <returns>errorCode, balance, id(last_insert_id)</returns>
-    public (int errorCode, decimal balance, long id) UpdateAgentBalance(int agentId, decimal money, string action, string type, string currency, string orderNo, string? roundNo = null)
+    public (int errorCode, decimal balance, long id) UpdateAgentBalance(int agentId, decimal money, int action, int type, string currency, string orderId, string? memo = null)
     {
-        // TODO: 改為 call sp updateAgentWallet
-        // var result = MySqlHelper.QueryFirstOrDefault<...>("CALL updateAgentWallet(...) ...");
-        // return (result.errorCode, result.balance, result.id);
-        // 目前暫用假資料
-        return (0, 1000m, 1L);
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MySqlHelper.GetConnStr());
+        try
+        {  
+            var parameters = new
+            {
+                in_agentId = agentId,
+                in_money = money,
+                in_action = action,
+                in_type = type,
+                in_orderId = orderId,
+                in_memo = memo 
+            }; 
+
+            conn.Open();
+            var result = conn.QueryFirstOrDefault<WalletOperationResult>(
+                "CALL updateAgentWallet(@in_agentId, @in_money, @in_action, @in_type, @in_orderId, @in_memo)",
+                parameters
+            );
+
+            if (result == null)
+                return (9001, 0m, 0L); // SP執行成功但無返回結果
+
+            return (result.ErrCode, result.Money / 100.0m, result.WalletSeq);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UpdateAgentBalance] Exception: {ex.Message}\n{ex.StackTrace}");
+            return (9003, 0m, 0L); // 資料庫執行錯誤
+        }
     }
 
     /// <summary>
@@ -55,16 +86,40 @@ public class AgentDao
     /// <param name="action">帳變操作</param>
     /// <param name="type">帳變類型</param>
     /// <param name="currency">幣別</param>
-    /// <param name="orderNo">訂單號</param>
-    /// <param name="roundNo">局號（非必填）</param>
+    /// <param name="orderId">訂單號</param>
+    /// <param name="memo">備註（非必填）</param>
     /// <returns>errorCode, balance, id(last_insert_id)</returns>
-    public (int errorCode, decimal balance, long id) UpdatePlayerBalance(string name, decimal money, string action, string type, string currency, string orderNo, string? roundNo = null)
+    public (int errorCode, decimal balance, long id) UpdatePlayerBalance(string name, decimal money, int action, int type, string currency, string orderId, string? memo = null)
     {
-        // TODO: 改為 call sp updatePlayerWallet
-        // var result = MySqlHelper.QueryFirstOrDefault<...>("CALL updatePlayerWallet(...) ...");
-        // return (result.errorCode, result.balance, result.id);
-        // 目前暫用假資料
-        return (0, 500m, 2L);
+       using var conn = new MySql.Data.MySqlClient.MySqlConnection(MySqlHelper.GetConnStr());
+        try
+        {
+            var parameters = new
+            {
+                in_name = name,
+                in_money = money,
+                in_action = action,
+                in_type = type,
+                in_orderId = orderId,
+                in_memo = memo
+            };
+
+            conn.Open();
+            var result = conn.QueryFirstOrDefault<WalletOperationResult>(
+                "CALL updatePlayerWallet(@in_name, @in_money, @in_action, @in_type, @in_orderId, @in_memo)",
+                parameters
+            );
+
+            if (result == null)
+                return (9001, 0m, 0L); // SP執行成功但無返回結果
+
+            return (result.ErrCode, result.Money / 100.0m, result.WalletSeq);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UpdatePlayerBalance] Exception: {ex.Message}\n{ex.StackTrace}");
+            return (9003, 0m, 0L); // 資料庫執行錯誤
+        }
     }
 
     /// <summary>
@@ -86,7 +141,7 @@ public class AgentDao
         {
             tran.Rollback();
             Console.WriteLine($"[UpdateAgentBalanceSql] Exception: {ex.Message}\n{ex.StackTrace}");
-            return (1, 0, 0L);
+            return (9003, 0, 0L); // 資料庫執行錯誤
         }
     }
 
@@ -114,7 +169,7 @@ public class AgentDao
         {
             tran.Rollback();
             Console.WriteLine($"[UpdatePlayerBalanceSql] Exception: {ex.Message}\n{ex.StackTrace}");
-            return (1, 0, 0L);
+            return (9003, 0, 0L); // 資料庫執行錯誤
         }
     }
 
@@ -137,7 +192,7 @@ public class AgentDao
         catch (Exception ex)
         {
             Console.WriteLine($"[GetPlayerBalance] Exception: {ex.Message}\n{ex.StackTrace}");
-            return (1, 0, 0L);
+            return (9003, 0, 0L); // 資料庫執行錯誤
         }
     }
 

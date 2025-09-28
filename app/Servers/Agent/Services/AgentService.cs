@@ -74,27 +74,32 @@ public class AgentService
         // redis檢查, 確認該玩家否正在上下分(下一階段再補)
         // orderid檢查, 確認該訂單是否已處理過(下一階段再補)
 
-        // 1. 代理商餘額減少
-        var (agentMoneyResult, agentBalanceNew, agentErr) = _agentDao.UpdateAgentBalanceSql(transferRequest.agentId, -transferRequest.amount);
+        // 1. 代理下分
+        var (agentMoneyResult, agentBalanceNew, seqNew) = _agentDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount,
+            (int)WalletAction.PlayerDeposit, (int)WalletTransactionType.TransferDeposit, transferRequest.currency, transferRequest.orderId);
         if (agentMoneyResult != 0)
-            return (false, 0, $"代理商餘額更新失敗: {agentErr}");
+        {
+            return (false, 0, $"代理商餘額更新失敗: {CommonUtils.GetErrorMessage(agentMoneyResult)}");
+        }
 
         Console.WriteLine($"[AgentService] Agent {transferRequest.agentId} balance decreased to {agentBalanceNew}");
-        // 2. 玩家餘額增加
+        // 2. 玩家上分
         var (playerMoneyResult, playerBalanceNew, playerErr) = _agentDao.UpdatePlayerBalanceSql(transferRequest.name, transferRequest.amount);
         if (playerMoneyResult != 0)
         {
-            // 玩家加錢失敗, 需要補回代理商的錢
-            var (rollBackResult, _, rollBackErr) = _agentDao.UpdateAgentBalanceSql(transferRequest.agentId, transferRequest.amount);
+            // 玩家上分失敗, 需要補回代理商的錢
+            var (rollBackResult, rollBackBalance, rollBackSeqNew) = _agentDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount
+                , (int)WalletAction.PlayerWithdraw, (int)WalletTransactionType.TransferDepositRollback, transferRequest.currency, $"RB_{transferRequest.orderId}");
             if (rollBackResult != 0)
             {
-                return (false, 0, $"玩家上分失敗 回滾代理金額失敗: {playerErr}, Rollback agent failed: {rollBackErr}");
+                return (false, 0, $"玩家上分失敗 回滾代理金額失敗: {playerErr}, Rollback agent failed: {CommonUtils.GetErrorMessage(rollBackResult)}");
             }
             return (false, 0, $"玩家上分失敗 回滾代理金額成功: {playerErr}");
         }
 
         Console.WriteLine($"[AgentService] Player {transferRequest.name} balance increased to {playerBalanceNew}");
-        // 3. 查詢玩家最新餘額（可依需求調整）
+
+        // 3. 查詢玩家最新餘額
         decimal balance = playerBalanceNew;
 
         return (true, balance, string.Empty);
