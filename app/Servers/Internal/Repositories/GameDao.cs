@@ -71,15 +71,15 @@ public class GameDao
     /// <param name="name">玩家名稱</param>
     /// <returns>errorCode, balance, id(last_insert_id)</returns> 
     /// errorCode: 0=成功, 1=例外錯誤, 2=name不存在
-    public (int errorCode, decimal balance, long id) GetPlayerBalance(string name)
+    public (int errorCode, decimal balance, long id) GetPlayerBalance(string name, string currency)
     {
         using var conn = new MySql.Data.MySqlClient.MySqlConnection(MySqlHelper.GetConnStr());
         try
         {
-            var balance = conn.QueryFirstOrDefault<decimal?>("SELECT money FROM player_wallets WHERE name = @name", new { name });
-            if (balance == null)
+            var result = conn.QueryFirstOrDefault("SELECT money, seq FROM player_wallets WHERE name = @name and currency = @currency", new { name, currency });
+            if (result == null)
                 return (2, 0, 0L); // 2: name 不存在
-            return (0, balance.Value, 0L);
+            return (0, (decimal)result.money, (long)result.seq);
         }
         catch (Exception ex)
         {

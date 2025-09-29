@@ -1,7 +1,6 @@
 
 using app.Servers.Agent.Services;
-using Microsoft.AspNetCore.Http;
-using System.Threading.Tasks;
+using app.Servers.Agent.Models;
 
 public static class AgentController
 {

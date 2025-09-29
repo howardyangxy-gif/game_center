@@ -1,5 +1,7 @@
 using app.Common;
 
+namespace app.Servers.Agent.Models;
+
 public class BalanceRequest : AgentRequestBase
 {
     [System.Text.Json.Serialization.JsonPropertyName("acc")]

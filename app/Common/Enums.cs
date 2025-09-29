@@ -94,7 +94,7 @@ namespace app.Common
         SqlAgentInsufficientBalance = 1002, // 代理餘額不足
         SqlPlayerWalletNotExists = 1003,    // 玩家錢包不存在
         SqlPlayerInsufficientBalance = 1004, // 玩家餘額不足
-        
+
         // 一般應用程式錯誤 (1-99)
         GeneralError = 1,               // 一般錯誤
         InvalidParameter = 2,           // 參數錯誤
@@ -130,5 +130,6 @@ namespace app.Common
         DatabaseConnectionError = 9002, // 資料庫連線錯誤
         DatabaseExecutionError = 9003,  // 資料庫執行錯誤
         
+        SingleWalletNotSupported = 9101 // 單一錢包不支援
     }
 }

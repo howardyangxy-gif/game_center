@@ -62,8 +62,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // DI 註冊 Services
 builder.Services.AddScoped<AgentService>();
 builder.Services.AddScoped<GameService>();
-builder.Services.AddScoped<SessionService>();
-builder.Services.AddScoped<PlayerService>();
 
 var app = builder.Build();
 
@@ -79,8 +77,6 @@ app.UseHttpsRedirection();
 // 模組化註冊 Endpoints
 app.MapAgentEndpoints();
 app.MapGameEndpoints();
-app.MapSessionEndpoints();
-app.MapPlayerEndpoints();
 
 app.MapGet("/", () => "Center API is running!");
 

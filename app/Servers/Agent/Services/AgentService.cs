@@ -1,6 +1,7 @@
 using System.Text.Json;
 using app.Common;
 using app.Common.Logging;
+using app.Servers.Agent.Models;
 
 namespace app.Servers.Agent.Services;
 
@@ -53,6 +54,9 @@ public class AgentService
             agentId = loginRequest.agentId,
             playerName = loginRequest.name,
         }));
+
+        // todo:產生遊戲連結(下一階段再補)
+        // 分為大廳跟直接近遊戲
 
         // 遊戲連結
         string gameUrl = $"https://game.example.com/play?user={loginRequest.name}&lang={loginRequest.lang}&currency={loginRequest.currency}&gameId={loginRequest.gameId}&token={token}&BackUrl={Uri.EscapeDataString(loginRequest.backUrl)}";
