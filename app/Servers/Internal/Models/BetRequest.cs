@@ -19,5 +19,4 @@ public class BetRequest
     public string currency { get; set; } = string.Empty;
     public decimal bet { get; set; } = 0;
     public decimal win { get; set; } = 0;
-    public decimal balance { get; set; } = 0;
 }

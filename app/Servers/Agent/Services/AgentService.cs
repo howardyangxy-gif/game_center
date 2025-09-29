@@ -1,6 +1,7 @@
 using System.Text.Json;
 using app.Common;
 using app.Common.Logging;
+using app.Infrastructure.Repositories;
 using app.Servers.Agent.Models;
 
 namespace app.Servers.Agent.Services;
@@ -8,6 +9,7 @@ namespace app.Servers.Agent.Services;
 public class AgentService
 {
     private readonly AgentDao _agentDao = new AgentDao();
+    private readonly CenterDao _centerDao = new CenterDao();
 
     public string GetAesKeyForAgent(int agentId)
     {
@@ -85,26 +87,27 @@ public class AgentService
         // orderid檢查, 確認該訂單是否已處理過(下一階段再補)
 
         // 1. 代理下分
-        var (agentMoneyResult, agentBalanceNew, seqNew) = _agentDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount,
+        var (agentUpdateResult, agentBalanceNew, agentSeqNew) = _centerDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount,
             (int)WalletAction.PlayerDeposit, (int)WalletTransactionType.TransferDeposit, transferRequest.currency, transferRequest.orderId);
-        if (agentMoneyResult != 0)
+        if (agentUpdateResult != 0)
         {
-            return (false, 0, $"代理商餘額更新失敗: {CommonUtils.GetErrorMessage(agentMoneyResult)}");
+            return (false, 0, $"代理商餘額更新失敗: {CommonUtils.GetErrorMessage(agentUpdateResult)}");
         }
 
         Console.WriteLine($"[AgentService] Agent {transferRequest.agentId} balance decreased to {agentBalanceNew}");
         // 2. 玩家上分
-        var (playerMoneyResult, playerBalanceNew, playerErr) = _agentDao.UpdatePlayerBalanceSql(transferRequest.name, transferRequest.amount);
-        if (playerMoneyResult != 0)
+        var (playerUpdateResult, playerBalanceNew, playerSeqNew) = _centerDao.UpdatePlayerBalance(transferRequest.name, transferRequest.amount,
+            (int)WalletAction.PlayerDeposit, (int)WalletTransactionType.TransferDeposit, transferRequest.currency, transferRequest.orderId);
+        if (playerUpdateResult != 0)
         {
             // 玩家上分失敗, 需要補回代理商的錢
-            var (rollBackResult, rollBackBalance, rollBackSeqNew) = _agentDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount
-                , (int)WalletAction.PlayerWithdraw, (int)WalletTransactionType.TransferDepositRollback, transferRequest.currency, $"RB_{transferRequest.orderId}");
+            var (rollBackResult, rollBackBalance, agentRollBackSeqNew) = _centerDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount
+                , (int)WalletAction.PlayerDepositRollback, (int)WalletTransactionType.TransferDepositRollback, transferRequest.currency, $"RB_{transferRequest.orderId}");
             if (rollBackResult != 0)
             {
-                return (false, 0, $"玩家上分失敗 回滾代理金額失敗: {playerErr}, Rollback agent failed: {CommonUtils.GetErrorMessage(rollBackResult)}");
+                return (false, 0, $"玩家上分失敗 回滾代理金額失敗: {CommonUtils.GetErrorMessage(playerUpdateResult)}, Rollback agent failed: {CommonUtils.GetErrorMessage(rollBackResult)}");
             }
-            return (false, 0, $"玩家上分失敗 回滾代理金額成功: {playerErr}");
+            return (false, 0, $"玩家上分失敗 回滾代理金額成功: {CommonUtils.GetErrorMessage(playerUpdateResult)}");
         }
 
         Console.WriteLine($"[AgentService] Player {transferRequest.name} balance increased to {playerBalanceNew}");
@@ -136,27 +139,36 @@ public class AgentService
         // redis檢查, 確認該玩家否正在上下分(下一階段再補)
         // orderid檢查, 確認該訂單是否已處理過(下一階段再補)
 
-        // 1. 玩家餘額減少
-        var (playerMoneyResult, playerBalanceNew, playerErr) = _agentDao.UpdatePlayerBalanceSql(transferRequest.name, -transferRequest.amount);
-        if (playerMoneyResult != 0)
-            return (false, 0, $"玩家下分失敗: {playerErr}");
+        // 1. 玩家下分
+        var (playerUpdateResult, playerBalanceNew, playerSeqNew) = _centerDao.UpdatePlayerBalance(transferRequest.name, transferRequest.amount,
+            (int)WalletAction.PlayerWithdraw, (int)WalletTransactionType.TransferWithdraw, transferRequest.currency, transferRequest.orderId);
+        if (playerUpdateResult != 0)
+        {
+            return (false, 0, $"玩家下分失敗: {CommonUtils.GetErrorMessage(playerUpdateResult)}");
+        }
 
         Console.WriteLine($"[AgentService] Player {transferRequest.name} balance decreased to {playerBalanceNew}");
-        // 2. 代理商餘額增加;
-        var (agentMoneyResult, agentBalanceNew, agentErr) = _agentDao.UpdateAgentBalanceSql(transferRequest.agentId, transferRequest.amount);
-        if (agentMoneyResult != 0)
+        
+        // 2. 代理上分
+        var (agentUpdateResult, agentBalanceNew, agentSeqNew) = _centerDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount,
+            (int)WalletAction.PlayerWithdraw, (int)WalletTransactionType.TransferWithdraw, transferRequest.currency, transferRequest.orderId);
+        if (agentUpdateResult != 0)
         {
-            // 代理商加錢失敗, 需要補回玩家的錢
-            var (rollBackResult, _, rollBackErr) = _agentDao.UpdatePlayerBalanceSql(transferRequest.name, transferRequest.amount);
+            // 代理商上分失敗, 需要補回玩家的錢
+            var (rollBackResult, rollBackBalance, playerRollBackSeqNew) = _centerDao.UpdatePlayerBalance(transferRequest.name, transferRequest.amount,
+                (int)WalletAction.PlayerWithdrawRollback, (int)WalletTransactionType.TransferWithdrawRollback, transferRequest.currency, $"RB_{transferRequest.orderId}");
             if (rollBackResult != 0)
             {
-                return (false, 0, $"代理商下分失敗 回滾玩家金額失敗: {agentErr}, Rollback player failed: {rollBackErr}");
+                return (false, 0, $"代理商上分失敗 回滾玩家金額失敗: {CommonUtils.GetErrorMessage(agentUpdateResult)}, Rollback player failed: {CommonUtils.GetErrorMessage(rollBackResult)}");
             }
-            return (false, 0, $"代理商下分失敗 回滾玩家金額成功: {agentErr}");
+            return (false, 0, $"代理商上分失敗 回滾玩家金額成功: {CommonUtils.GetErrorMessage(agentUpdateResult)}");
         }
+
         Console.WriteLine($"[AgentService] Agent {transferRequest.agentId} balance increased to {agentBalanceNew}");
-        // 3. 查詢玩家最新餘額（可依需求調整）
+
+        // 3. 查詢玩家最新餘額
         decimal balance = playerBalanceNew;
+
         return (true, balance, string.Empty);
     }
 
@@ -173,7 +185,7 @@ public class AgentService
         balanceRequest.name = balanceRequest.agentId.ToString() + "_" + balanceRequest.name.Trim();
         
         // 1. 查詢玩家餘額  
-        var (Result, playerBalance, Err) = _agentDao.GetPlayerBalance(balanceRequest.name);
+        var (Result, playerBalance, Err) = _centerDao.GetPlayerBalance(balanceRequest.name);
         if (Result != 0)
             return (false, 0, $"玩家查詢餘額失敗: {Err}");
         return (true, playerBalance, string.Empty);
@@ -184,7 +196,7 @@ public class AgentService
         try
         {
             // 更新玩家最後登入時間, 不存在則創建
-            var (Result, Err) = _agentDao.UpdateAccount(agentId, playerName);
+            var (Result, Err) = _centerDao.UpdateAccount(agentId, playerName);
             if (Result == -1)
             {
                 return (1, $"更新玩家最後登入時間失敗: {Err}");
@@ -192,7 +204,7 @@ public class AgentService
             else if (Result == 0)
             {
                 // 創建新玩家
-                _agentDao.CreatePlayer(agentId, playerName);
+                _centerDao.CreatePlayer(agentId, playerName);
                 Console.WriteLine($"[AgentService] Created new player: {playerName} for agent {agentId}");
             }
 

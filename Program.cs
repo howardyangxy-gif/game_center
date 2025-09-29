@@ -97,4 +97,3 @@ finally
 {
     Log.CloseAndFlush();
 }
-
