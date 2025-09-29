@@ -1,6 +1,7 @@
 using app.Services;
 using app.Infrastructure;
 using app.Servers.Agent.Services;
+using app.Common;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
@@ -64,6 +65,9 @@ builder.Services.AddScoped<AgentService>();
 builder.Services.AddScoped<GameService>();
 
 var app = builder.Build();
+
+// 加入異常處理中介層
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
