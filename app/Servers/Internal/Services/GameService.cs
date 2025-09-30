@@ -3,7 +3,6 @@ using app.Common.Logging;
 using System.Text.Json;
 using app.Servers.Internal.Models;
 using app.Infrastructure.Repositories;
-using Serilog;
 
 namespace app.Services;
 
@@ -188,9 +187,16 @@ public class GameService
                 }
             }
 
-            // 3. 儲存遊戲注單(下一階段再補)
+            // 3. 儲存遊戲注單
+            var (saveResult, saveErrorMsg) = _gameDao.SaveGameRecord(betRequest.orderId, betRequest.gameId, betRequest.agentId, betRequest.name,
+                betRequest.bet, betRequest.win, betRequest.bet, 0, betRequest.record, betRequest.currency, betRequest.gameEndTime, betRequest.reason);
+            if (saveResult != 0)
+            {
+                // 失敗要進回補
+                LogService.Game.LogWarning("PlayerBetAndSettle", $"Save game record failed for user {betRequest.name}, order {betRequest.orderId}, error: {saveErrorMsg}. Will retry later.");
+            }
 
-            //回傳成功
+            //回傳服務端成功
             LogService.Game.LogInfo("PlayerBetAndSettle", $"Bet and settle successful for user {betRequest.name}, final balance {finalBalance}, seq {seq}");
             return ((int)ErrorCode.Success, new
             {

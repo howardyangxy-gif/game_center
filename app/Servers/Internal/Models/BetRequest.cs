@@ -1,4 +1,5 @@
 using app.Common;
+using System.Text.Json.Serialization;
 
 namespace app.Servers.Internal.Models;
 
@@ -8,9 +9,9 @@ public class BetRequest
 {
     public string traceID { get; set; } = string.Empty;
     public int agentId { get; set; } = 0;
-    [System.Text.Json.Serialization.JsonPropertyName("userId")]
+    [JsonPropertyName("userId")]
     public string name { get; set; } = string.Empty;
-    [System.Text.Json.Serialization.JsonPropertyName("opId")]
+    [JsonPropertyName("opId")]
     public string orderId { get; set; } = string.Empty;
     public int gameId { get; set; } = 0;
     public int machineId { get; set; } = 0;
@@ -19,4 +20,7 @@ public class BetRequest
     public decimal bet { get; set; } = 0;
     public decimal win { get; set; } = 0;
     public string record { get; set; } = string.Empty; // 遊戲端下注紀錄, json string
+    public string reason { get; set; } = string.Empty; // 備註
+    public long gameEndTime { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    
 }

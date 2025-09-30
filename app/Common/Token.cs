@@ -11,7 +11,7 @@ public static class Token
     {
         var payload = new
         {
-            data = data,
+            data,
             created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             exp = DateTimeOffset.UtcNow.AddSeconds(expireSeconds).ToUnixTimeSeconds()
         };

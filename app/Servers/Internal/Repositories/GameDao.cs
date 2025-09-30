@@ -1,4 +1,5 @@
 using Dapper;
+using app.Common;
 using app.Infrastructure;
 
 public class GameDao
@@ -18,50 +19,87 @@ public class GameDao
     }
 
     /// <summary>
-    /// 更新玩家錢包餘額（未來將呼叫 SP updatePlayerWallet）
+    /// 儲存遊戲注單
     /// </summary>
+    /// <param name="orderId">局號</param>
+    /// <param name="gameId">遊戲ID</param>
+    /// <param name="agentId">代理ID</param>
     /// <param name="name">玩家名稱</param>
-    /// <param name="money">帳變金額</param>
-    /// <param name="action">帳變操作</param>
-    /// <param name="type">帳變類型</param>
+    /// <param name="bet">下注金額</param>
+    /// <param name="win">獲利金額</param>
+    /// <param name="cellScore">流水</param>
+    /// <param name="revenue">抽水</param>
+    /// <param name="record">注單資訊</param>
     /// <param name="currency">幣別</param>
-    /// <param name="orderNo">訂單號</param>
-    /// <param name="roundNo">局號（非必填）</param>
-    /// <returns>errorCode, balance, id(last_insert_id)</returns>
-    public (int errorCode, decimal balance, long id) UpdatePlayerBalance(string name, decimal money, string action, string type, string currency, string orderNo, string? roundNo = null)
-    {
-        // TODO: 改為 call sp updatePlayerWallet
-        // var result = MySqlHelper.QueryFirstOrDefault<...>("CALL updatePlayerWallet(...) ...");
-        // return (result.errorCode, result.balance, result.id);
-        // 目前暫用假資料
-        return (0, 500m, 2L);
-    }
-
-    /// <summary>
-    /// 更新玩家錢包餘額（SQL 實作，回傳更新後餘額）
-    /// </summary>
-    public (int errorCode, decimal balance, long id) UpdatePlayerBalanceSql(string name, decimal money)
+    /// <param name="gameEndTimeMs">遊戲結束時間（Unix 毫秒時間戳）</param>
+    /// <param name="reason">備註</param>
+    /// <returns>errorCode, string errorMsg</returns>
+    public (int errorCode, string errorMsg) SaveGameRecord(
+        string orderId, int gameId, int agentId, string name, 
+        decimal bet, decimal win, decimal cellScore, decimal revenue, 
+        string record, string currency, long gameEndTimeMs, string? reason = null)
     {
         using var conn = new MySql.Data.MySqlClient.MySqlConnection(MySqlHelper.GetConnStr());
-        conn.Open();
-        using var tran = conn.BeginTransaction();
         try
         {
-            int affectedRows = conn.Execute("UPDATE player_wallets SET money = money + @money WHERE name = @name", new { money, name }, tran);
-            if (affectedRows == 0)
+            conn.Open();
+            
+            // 取得遊戲代碼
+            string? gameCode = conn.QueryFirstOrDefault<string>(
+                "SELECT gameCode FROM game_info WHERE gameId = @gameId", 
+                new { gameId });
+                
+            if (string.IsNullOrEmpty(gameCode))
             {
-                tran.Rollback();
-                return (2, 0, 0L); // 2: name 不存在或沒異動
+                return ((int)ErrorCode.GameNotFound, $"Game ID {gameId} not found");
             }
-            var balance = conn.QueryFirstOrDefault<decimal>("SELECT money FROM player_wallets WHERE name = @name", new { name }, tran);
-            tran.Commit();
-            return (0, balance, 0L);
+            
+            // 將 timestamp 轉換為 DateTime
+            DateTime gameEndTime = DateTimeOffset.FromUnixTimeMilliseconds(gameEndTimeMs).DateTime;
+            
+            // 建立動態表名
+            string tableName = $"game_record_{gameCode}";
+            
+            // 插入注單記錄
+            string sql = $@"
+                INSERT INTO {tableName} 
+                (orderId, gameId, agentId, account, bet, win, 
+                 cellScore, revenue, record, currency, reason, gameEndTime, createTime)
+                VALUES 
+                (@orderId, @gameId, @agentId, @name, @bet, @win,
+                 @cellScore, @revenue, @record, @currency, @reason, @gameEndTime, NOW())";
+
+            var parameters = new
+            {
+                orderId,
+                gameId,
+                agentId,
+                name,
+                bet,
+                win,
+                cellScore,
+                revenue,
+                record,
+                currency,
+                reason,
+                gameEndTime
+            };
+            
+            int affectedRows = conn.Execute(sql, parameters);
+            
+            if (affectedRows > 0)
+            {
+                return (0, string.Empty);
+            }
+            else
+            {
+                return ((int)ErrorCode.GameRecordInsertError, "Failed to insert game record");
+            }
         }
         catch (Exception ex)
         {
-            tran.Rollback();
-            Console.WriteLine($"[UpdatePlayerBalanceSql] Exception: {ex.Message}\n{ex.StackTrace}");
-            return (1, 0, 0L);
+            Console.WriteLine($"[SaveGameRecord] Exception: {ex.Message}\n{ex.StackTrace}");
+            return ((int)ErrorCode.DatabaseError, $"Database error: {ex.Message}");
         }
     }
 
@@ -69,22 +107,22 @@ public class GameDao
     /// 取得玩家錢包餘額    
     /// </summary>
     /// <param name="name">玩家名稱</param>
-    /// <returns>errorCode, balance, id(last_insert_id)</returns> 
+    /// <returns>errorCode, balance, seq</returns> 
     /// errorCode: 0=成功, 1=例外錯誤, 2=name不存在
-    public (int errorCode, decimal balance, long id) GetPlayerBalance(string name, string currency)
+    public (int errorCode, decimal balance, long seq) GetPlayerBalance(string name, string currency)
     {
         using var conn = new MySql.Data.MySqlClient.MySqlConnection(MySqlHelper.GetConnStr());
         try
         {
             var result = conn.QueryFirstOrDefault("SELECT money, seq FROM player_wallets WHERE name = @name and currency = @currency", new { name, currency });
             if (result == null)
-                return (2, 0, 0L); // 2: name 不存在
+                return ((int)ErrorCode.PlayerNotFound, 0, 0L);
             return (0, (decimal)result.money, (long)result.seq);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[GetPlayerBalance] Exception: {ex.Message}\n{ex.StackTrace}");
-            return (1, 0, 0L);
+            return ((int)ErrorCode.DatabaseError, 0, 0L);
         }
     }
 

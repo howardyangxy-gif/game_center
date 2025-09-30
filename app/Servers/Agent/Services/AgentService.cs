@@ -53,7 +53,7 @@ public class AgentService
         }
 
         var token = Token.createToken(JsonSerializer.Serialize(new {
-            agentId = loginRequest.agentId,
+            loginRequest.agentId,
             playerName = loginRequest.name,
         }));
 
@@ -67,7 +67,7 @@ public class AgentService
     }
     public (bool success, decimal balance, string errorMsg) PlayerDeposit(TransferRequest transferRequest)
     {
-        Console.WriteLine($"[AgentService] Player deposit request: {JsonSerializer.Serialize(transferRequest)}");
+        LogService.Agent.LogInfo($"[AgentService] Player deposit request: {JsonSerializer.Serialize(transferRequest)}");
         // 檢查錢包type, 單一錢包則略過
         if (transferRequest.walletType == WalletType.Single)
         {
@@ -94,7 +94,7 @@ public class AgentService
             return (false, 0, $"代理商餘額更新失敗: {CommonUtils.GetErrorMessage(agentUpdateResult)}");
         }
 
-        Console.WriteLine($"[AgentService] Agent {transferRequest.agentId} balance decreased to {agentBalanceNew}");
+        LogService.Agent.LogInfo("Agent balance decreased", new { AgentId = transferRequest.agentId, NewBalance = agentBalanceNew });
         // 2. 玩家上分
         var (playerUpdateResult, playerBalanceNew, playerSeqNew) = _centerDao.UpdatePlayerBalance(transferRequest.name, transferRequest.amount,
             (int)WalletAction.PlayerDeposit, (int)WalletTransactionType.TransferDeposit, transferRequest.currency, transferRequest.orderId);
@@ -110,7 +110,7 @@ public class AgentService
             return (false, 0, $"玩家上分失敗 回滾代理金額成功: {CommonUtils.GetErrorMessage(playerUpdateResult)}");
         }
 
-        Console.WriteLine($"[AgentService] Player {transferRequest.name} balance increased to {playerBalanceNew}");
+        LogService.Agent.LogInfo("Player balance increased", new { PlayerName = transferRequest.name, NewBalance = playerBalanceNew });
 
         // 3. 查詢玩家最新餘額
         decimal balance = playerBalanceNew;
@@ -120,7 +120,7 @@ public class AgentService
 
     public (bool success, decimal balance, string errorMsg) PlayerWithdrawal(TransferRequest transferRequest)
     {
-        Console.WriteLine($"[AgentService] Player withdrawal request: {JsonSerializer.Serialize(transferRequest)}");
+        LogService.Agent.LogInfo("Player withdrawal request", transferRequest);
         // 檢查錢包type, 單一錢包則略過
         if (transferRequest.walletType == WalletType.Single)
         {
@@ -147,7 +147,7 @@ public class AgentService
             return (false, 0, $"玩家下分失敗: {CommonUtils.GetErrorMessage(playerUpdateResult)}");
         }
 
-        Console.WriteLine($"[AgentService] Player {transferRequest.name} balance decreased to {playerBalanceNew}");
+        LogService.Agent.LogInfo("Player balance decreased", new { PlayerName = transferRequest.name, NewBalance = playerBalanceNew });
         
         // 2. 代理上分
         var (agentUpdateResult, agentBalanceNew, agentSeqNew) = _centerDao.UpdateAgentBalance(transferRequest.agentId, transferRequest.amount,
@@ -164,7 +164,7 @@ public class AgentService
             return (false, 0, $"代理商上分失敗 回滾玩家金額成功: {CommonUtils.GetErrorMessage(agentUpdateResult)}");
         }
 
-        Console.WriteLine($"[AgentService] Agent {transferRequest.agentId} balance increased to {agentBalanceNew}");
+        LogService.Agent.LogInfo("Agent balance increased", new { AgentId = transferRequest.agentId, NewBalance = agentBalanceNew });
 
         // 3. 查詢玩家最新餘額
         decimal balance = playerBalanceNew;
@@ -174,7 +174,7 @@ public class AgentService
 
     public (bool success, decimal balance, string errorMsg) GetPlayerBalance(BalanceRequest balanceRequest)
     {
-        Console.WriteLine($"[AgentService] Get player balance request: {JsonSerializer.Serialize(balanceRequest)}");
+        LogService.Agent.LogInfo("Get player balance request", balanceRequest);
         // 檢查錢包type, 單一錢包則略過
         if (balanceRequest.walletType == WalletType.Single)
         {
@@ -205,14 +205,14 @@ public class AgentService
             {
                 // 創建新玩家
                 _centerDao.CreatePlayer(agentId, playerName);
-                Console.WriteLine($"[AgentService] Created new player: {playerName} for agent {agentId}");
+                LogService.Agent.LogInfo("Created new player", new { PlayerName = playerName, AgentId = agentId });
             }
 
             return (0, string.Empty);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[AgentService] Error in UpdateAccount transaction: {ex.Message}");
+            LogService.Agent.LogError("Error in UpdateAccount transaction", ex);
             return (1, "Database error during account update");
         }
     }
