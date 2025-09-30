@@ -8,15 +8,15 @@ public class BetRequest
 {
     public string traceID { get; set; } = string.Empty;
     public int agentId { get; set; } = 0;
-
     [System.Text.Json.Serialization.JsonPropertyName("userId")]
     public string name { get; set; } = string.Empty;
+    [System.Text.Json.Serialization.JsonPropertyName("opId")]
     public string orderId { get; set; } = string.Empty;
-    public string gameNo { get; set; } = string.Empty;
     public int gameId { get; set; } = 0;
     public int machineId { get; set; } = 0;
     public WalletType walletType { get; set; } = WalletType.Single;
     public string currency { get; set; } = string.Empty;
     public decimal bet { get; set; } = 0;
     public decimal win { get; set; } = 0;
+    public string record { get; set; } = string.Empty; // 遊戲端下注紀錄, json string
 }

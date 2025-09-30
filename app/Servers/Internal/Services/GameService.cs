@@ -2,13 +2,16 @@ using app.Common;
 using app.Common.Logging;
 using System.Text.Json;
 using app.Servers.Internal.Models;
-using Mysqlx;
+using app.Infrastructure.Repositories;
+using Serilog;
 
 namespace app.Services;
 
 public class GameService
 {
+    private readonly AgentDao _agentDao = new AgentDao();
     private readonly GameDao _gameDao = new GameDao();
+    private readonly CenterDao _centerDao = new CenterDao();
 
     // 暫時測試token使用
     public string CreateTestToken()
@@ -66,16 +69,18 @@ public class GameService
                 return (errorCode, null, $"Token validation failed with error code: {errorCode}");
             }
 
-
-            // 從agentId 取得WalletType (暫時寫死)
-            // 從agentId 取得幣種 (暫時寫死)
+            var agentInfo = _agentDao.GetAgentInfo(checkRequest.agentId);
+            if (agentInfo == null)
+            {
+                return ((int)ErrorCode.AgentNotFound, null, "Agent not found");
+            }
 
             return (0, new
             {
                 checkRequest.agentId,
                 userId = checkRequest.name,
-                walletType = WalletType.Transfer,
-                currency = "TWD"
+                walletType = agentInfo.WalletType,
+                currency = agentInfo.Currency
             }, string.Empty);
         }
         catch (Exception ex)
@@ -139,6 +144,8 @@ public class GameService
         try
         {
             LogService.Game.LogInfo("PlayerBetAndSettle", betRequest);
+            decimal finalBalance = 0.0m;
+            long seq = 0;
 
             // 分成單一錢包跟轉帳錢包
             // 單一錢包 , 通知代理商進行扣款
@@ -146,20 +153,52 @@ public class GameService
             if (betRequest.walletType == WalletType.Single)
             {
                 // todo:單一錢包, 會通知代理商進行扣款(下一階段再補)
+                LogService.Game.LogInfo("PlayerBetAndSettle", "Single wallet bet - notify agent to deduct balance (not implemented)");
                 return ((int)ErrorCode.SingleWalletNotSupported, null, "單一錢包不支持此操作");
             }
             else
             {
-                // todo:帳號扣款
                 // 1. 先扣款
-                // 2. 若失敗, 回傳錯誤, 並cancelBet?
-                // 3. 若成功, 再進行結算
-                // 
+                var (updateResult, playerBalanceNew, seqNew) = _centerDao.UpdatePlayerBalance(betRequest.name, betRequest.bet,
+                    (int)WalletAction.PlayerWithdraw, (int)WalletTransactionType.GameBet, betRequest.currency, betRequest.orderId);
+                if (updateResult != 0)
+                {
+                    // 若失敗, 回傳錯誤, 並cancelBet(下一階段再補)
+                    LogService.Game.LogWarning("PlayerBetAndSettle", $"Bet failed for user {betRequest.name}, order {betRequest.orderId}, error code {updateResult}");
+                    return ((int)ErrorCode.PlayerBalanceInsufficient, null, CommonUtils.GetErrorMessage(updateResult));
+                }
 
+                finalBalance = playerBalanceNew;
+                seq = seqNew;
 
+                // 2. 若成功, 再進行結算更新餘額
+                if (betRequest.win > 0)
+                {
+                    LogService.Game.LogInfo("PlayerBetAndSettle", $"Bet successful for user {betRequest.name}, order {betRequest.orderId}, proceeding to settle win amount {betRequest.win}");
+                    var (settleResult, settleBalanceNew, settleSeqNew) = _centerDao.UpdatePlayerBalance(betRequest.name, betRequest.win,
+                    (int)WalletAction.PlayerDeposit, (int)WalletTransactionType.GameWin, betRequest.currency, $"{betRequest.orderId}_win");
+                    if (settleResult != 0)
+                    {
+                        // 若結算更新餘額失敗, 還是要回傳成功, 並存至排程補做(下一階段再補)
+                        LogService.Game.LogWarning("PlayerBetAndSettle", $"Settle failed for user {betRequest.name}, order {betRequest.orderId}_win, error code {settleResult}. Will retry later.");
+                    }
+
+                    finalBalance = settleBalanceNew;
+                    seq = settleSeqNew;   
+                }
             }
 
-            return ((int)ErrorCode.Success, null, "Not implemented yet");
+            // 3. 儲存遊戲注單(下一階段再補)
+
+            //回傳成功
+            LogService.Game.LogInfo("PlayerBetAndSettle", $"Bet and settle successful for user {betRequest.name}, final balance {finalBalance}, seq {seq}");
+            return ((int)ErrorCode.Success, new
+            {
+                betRequest.name,
+                finalBalance,
+                betRequest.currency,
+                seq
+            }, string.Empty);
         }
         catch (Exception ex)
         {

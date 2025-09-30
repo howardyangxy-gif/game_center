@@ -211,7 +211,7 @@ public class CenterDao
             // 同時在 player_wallets 建立對應的錢包紀錄，初始餘額為 0
             conn.Execute(@"INSERT INTO player_wallets (name, currency, money)
                             VALUES (@playerName,
-                        (SELECT currency FROM currencies WHERE id = (SELECT moneyType FROM agents WHERE id = @agentId)),0)", new { agentId, playerName }, tran);
+                        (SELECT currency FROM agents WHERE id = @agentId),0)", new { agentId, playerName }, tran);
             tran.Commit();
         }
         catch (Exception ex)
