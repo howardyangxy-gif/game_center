@@ -200,7 +200,7 @@ public class GameService
             LogService.Game.LogInfo("PlayerBetAndSettle", $"Bet and settle successful for user {betRequest.name}, final balance {finalBalance}, seq {seq}");
             return ((int)ErrorCode.Success, new
             {
-                betRequest.name,
+                userId = betRequest.name,
                 finalBalance,
                 betRequest.currency,
                 seq
